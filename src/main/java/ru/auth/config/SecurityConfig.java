@@ -12,6 +12,8 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import ru.auth.security.JwtRequestFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -20,9 +22,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     private final CustomUserDetailsService userDetailsService;
 
+    private final JwtRequestFilter jwtRequestFilter;
+
     @Autowired
-    public SecurityConfig(CustomUserDetailsService userDetailsService) {
+    public SecurityConfig(CustomUserDetailsService userDetailsService, JwtRequestFilter jwtRequestFilter) {
         this.userDetailsService = userDetailsService;
+        this.jwtRequestFilter = jwtRequestFilter;
     }
 
     @Bean
@@ -43,7 +48,14 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
                 .authorizeRequests()
-                .antMatchers("/auth/register", "/auth/login").permitAll()
+                    .antMatchers("/auth/register", "/auth/login").permitAll()
+                    // .antMatchers("/api/admin/**").hasRole("ADMIN")
+                    // .antMatchers("/api/premium/**").hasRole("PREMIUM_USER")
+                    .anyRequest().authenticated() // Все остальные запросы требуют аутентификации
+                .and()
+                // Добавляем наш JWT фильтр ПЕРЕД стандартным фильтром аутентификации по имени пользователя/паролю.
+                // Это гарантирует, что наш JWT фильтр сработает первым.
+                .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
         ;
     }
     
