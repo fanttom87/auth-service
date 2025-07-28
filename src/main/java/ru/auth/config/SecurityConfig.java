@@ -48,15 +48,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
                 .authorizeRequests()
-                    .antMatchers("/auth/register", "/auth/login").permitAll()
-                    // .antMatchers("/api/admin/**").hasRole("ADMIN")
-                    // .antMatchers("/api/premium/**").hasRole("PREMIUM_USER")
-                    .anyRequest().authenticated() // Все остальные запросы требуют аутентификации
+                .antMatchers("/auth/register", "/auth/login").permitAll()
+                .antMatchers("/api/admin/**").hasRole("ADMIN") // /api/admin/ только для ADMIN
+                .antMatchers("/api/premium/**").hasRole("PREMIUM_USER") // /api/premium/ только для PREMIUM_USER
+                .anyRequest().authenticated() // Все остальные запросы требуют аутентификации
                 .and()
-                // Добавляем наш JWT фильтр ПЕРЕД стандартным фильтром аутентификации по имени пользователя/паролю.
-                // Это гарантирует, что наш JWT фильтр сработает первым.
                 .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
-        ;
     }
     
     @Override
