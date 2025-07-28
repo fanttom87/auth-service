@@ -21,6 +21,7 @@ public class JwtUtil {
     @Value("${jwt.expiration.ms:3600000}")
     private long expirationMs;
 
+
     /**
      * Извлекает логин пользователя из JWT токена.
      * @param token JWT токен.
@@ -105,4 +106,6 @@ public class JwtUtil {
                 .signWith(SignatureAlgorithm.HS256, secret)
                 .compact();
     }
+
+
 }

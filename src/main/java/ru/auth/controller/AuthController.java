@@ -15,7 +15,9 @@ import ru.auth.payload.LoginResponse;
 import ru.auth.payload.RegistrationRequest;
 import ru.auth.security.JwtUtil;
 import ru.auth.service.AuthService;
+import ru.auth.service.RevokedTokenService;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,16 +29,19 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
     private final JwtUtil jwtUtil;
+    private final RevokedTokenService revokedTokenService;
 
     @Autowired
     public AuthController(AuthService authService,
                           AuthenticationManager authenticationManager,
                           CustomUserDetailsService userDetailsService,
-                          JwtUtil jwtUtil) {
+                          JwtUtil jwtUtil,
+                          RevokedTokenService revokedTokenService) {
         this.authService = authService;
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
+        this.revokedTokenService = revokedTokenService;
     }
 
     /**
@@ -72,29 +77,54 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest request) {
         try {
-            // 1. Аутентификация пользователя с использованием AuthenticationManager
-            // Это вызовет наш CustomUserDetailsService для проверки логина и пароля.
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getLogin(), request.getPassword())
             );
 
-            // 2. Если аутентификация прошла успешно, получаем UserDetails
             final UserDetails userDetails = userDetailsService.loadUserByUsername(request.getLogin());
 
-            // 3. Генерируем JWT токен
             final String jwt = jwtUtil.generateToken(userDetails);
 
-            // 4. Возвращаем токен в ответе
             return ResponseEntity.ok(new LoginResponse(jwt));
 
         } catch (BadCredentialsException e) {
-            // Если логин или пароль неверные
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid login or password.");
         } catch (Exception e) {
-            // Обработка других возможных ошибок
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An error occurred during login.");
         }
     }
 
-    // TODO: Добавим эндпоинт для отзыва токена позже
+    /**
+     * Эндпоинт для отзыва текущего авторизованного токена.
+     * Токен должен быть передан в заголовке Authorization.
+     * @return Ответ об успехе или ошибке.
+     */
+    @PostMapping("/revoke")
+    public ResponseEntity<?> revokeToken(@RequestHeader("Authorization") String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return ResponseEntity.badRequest().body("Authorization header missing or in wrong format.");
+        }
+
+        String jwt = authorizationHeader.substring(7);
+
+        try {
+            String username = jwtUtil.extractUsername(jwt);
+            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            Date expirationDate = jwtUtil.extractExpiration(jwt);
+
+            if (!jwtUtil.validateToken(jwt, userDetails)) {
+                return ResponseEntity.badRequest().body("Токе не валидный или истек.");
+            }
+            if (revokedTokenService.isTokenRevoked(jwt)) {
+                return ResponseEntity.badRequest().body("Токен уже отозван.");
+            }
+
+            revokedTokenService.revokeToken(jwt, expirationDate);
+
+            return ResponseEntity.ok("Токер успешно отозван.");
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Ошибка при отзывании токена.");
+        }
+    }
 }

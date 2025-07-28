@@ -8,6 +8,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ru.auth.config.CustomUserDetailsService;
+import ru.auth.service.RevokedTokenService;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -20,11 +21,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     private final CustomUserDetailsService userDetailsService;
     private final JwtUtil jwtUtil;
+    private final RevokedTokenService revokedTokenService;
 
     @Autowired
-    public JwtRequestFilter(CustomUserDetailsService userDetailsService, JwtUtil jwtUtil) {
+    public JwtRequestFilter(CustomUserDetailsService userDetailsService, JwtUtil jwtUtil, RevokedTokenService revokedTokenService) {
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
+        this.revokedTokenService = revokedTokenService;
     }
 
     /**
@@ -46,20 +49,21 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+
             }
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
 
+            boolean isTokenValid = jwtUtil.validateToken(jwt, userDetails);
+            boolean isTokenRevoked = revokedTokenService.isTokenRevoked(jwt);
+
             // Проверяем, что логин совпадает и токен не истек
-            if (jwtUtil.validateToken(jwt, userDetails)) {
+            if (isTokenValid && !isTokenRevoked) {
                 UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());
-
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
             }
         }
